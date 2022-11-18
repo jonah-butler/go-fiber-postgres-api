@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"os"
 
-	db "go-postgres-fiber/connection"
+	database "go-postgres-fiber/connection"
+	"go-postgres-fiber/helpers"
 	"go-postgres-fiber/models"
+	"go-postgres-fiber/users"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
@@ -18,6 +20,12 @@ type Book struct {
 	Author    string `json:"author"`
 	Title     string `json:"title"`
 	Publisher string `json:"publisher"`
+}
+
+type User struct {
+	Username string ``
+	Email    string ``
+	Password string ``
 }
 
 type Repository struct {
@@ -48,21 +56,44 @@ func (r *Repository) CreateBook(context *fiber.Ctx) error {
 	)
 }
 
-func (r *Repository) GetBooks(context *fiber.Ctx) error {
-	books := &[]models.Books{}
+func (r *Repository) CreateJWT(context *fiber.Ctx) error {
 
-	err := r.DB.Find(books).Error
+	token, err := helpers.GenerateJWT()
 	if err != nil {
-		context.Status(http.StatusBadRequest).JSON(
-			&fiber.Map{"message": "could not retrieve books"},
-		)
-		return err
+		log.Fatal("failed to execute GenerateJWT func", err)
 	}
 
 	return context.Status(http.StatusOK).JSON(
-		&fiber.Map{"data": books},
+		&fiber.Map{"token": token},
 	)
+
 }
+
+func (r *Repository) ValidateJWT(context *fiber.Ctx) error {
+
+	helpers.VerifyJWT(context.GetReqHeaders())
+
+	return context.Status(http.StatusAccepted).JSON(
+		&fiber.Map{"status": 200},
+	)
+
+}
+
+// func (r *Repository) GetBooks(context *fiber.Ctx) error {
+// 	books := &[]models.Books{}
+
+// 	err := r.DB.Find(books).Error
+// 	if err != nil {
+// 		context.Status(http.StatusBadRequest).JSON(
+// 			&fiber.Map{"message": "could not retrieve books"},
+// 		)
+// 		return err
+// 	}
+
+// 	return context.Status(http.StatusOK).JSON(
+// 		&fiber.Map{"data": books},
+// 	)
+// }
 
 func DeleteBook() {
 	fmt.Println("delete book")
@@ -79,9 +110,10 @@ func UpdateBook() {
 func (r *Repository) SetupRoutes(app *fiber.App) {
 	api := app.Group("/api")
 	api.Post("/create_books", r.CreateBook)
-	// api.Delete("/delete_book/:id", r.DeleteBook)
-	// api.Get("/get_book/:id", r.GetBookByID)
-	api.Get("/books", r.GetBooks)
+	// api.Get("/books", r.GetBooks)
+	api.Get("/jwt", r.CreateJWT)
+	api.Post("/jwt", r.ValidateJWT)
+	api.Post("/register")
 }
 
 func main() {
@@ -90,7 +122,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	config := &db.Config{
+	config := &database.Config{
 		Host:     os.Getenv("DB_HOST"),
 		Port:     os.Getenv("DB_PORT"),
 		User:     os.Getenv("DB_USER"),
@@ -99,21 +131,23 @@ func main() {
 		DBName:   os.Getenv("DB_NAME"),
 	}
 
-	db, err := db.NewConnection(config)
+	db, err := database.NewConnection(config)
 	if err != nil {
 		log.Fatal("could not connect to databse")
 	}
 
-	err = models.MigrateBooks(db)
+	err = models.MigrateTables(db)
 	if err != nil {
 		log.Fatal("could not migrate db")
 	}
 
-	r := Repository{
-		DB: db,
-	}
+	database.Conn = db
+
+	// r := Repository{
+	// 	DB: db,
+	// }
 
 	app := fiber.New()
-	r.SetupRoutes(app)
+	users.SetupRoutes(app)
 	app.Listen(":8080")
 }
