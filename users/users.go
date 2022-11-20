@@ -8,14 +8,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	database "go-postgres-fiber/connection"
+	"go-postgres-fiber/models"
 
 	"github.com/gofiber/fiber/v2"
-	"gorm.io/gorm"
 )
-
-type Repository struct {
-	DB *gorm.DB
-}
 
 type User struct {
 	Id        uint      `json:"id"`
@@ -41,6 +37,7 @@ func SetupRoutes(app fiber.Router) {
 
 	user.Post("/register", CreateUser)
 	user.Post("/login", ValidateUser)
+	user.Get("/", GetUser)
 }
 
 func CreateUser(context *fiber.Ctx) error {
@@ -62,7 +59,7 @@ func CreateUser(context *fiber.Ctx) error {
 	if err != nil {
 		fmt.Println("error creating user", err)
 		return context.Status(http.StatusBadRequest).JSON(
-			&fiber.Map{"message": "could not create book"},
+			&fiber.Map{"message": "could not create user"},
 		)
 	}
 
@@ -108,6 +105,26 @@ func ValidateUser(context *fiber.Ctx) error {
 		},
 	)
 
+}
+
+func GetUser(context *fiber.Ctx) error {
+
+	user := models.User{}
+
+	err := database.Conn.
+		Preload("ShareableItems").
+		First(&user, 5).Error
+
+	if err != nil {
+		fmt.Println("failed to lookup user of ID 5")
+	}
+
+	return context.Status(http.StatusOK).JSON(
+		&fiber.Map{
+			"status": http.StatusOK,
+			"user":   user,
+		},
+	)
 }
 
 func hasAndSaltPassword(password string) string {
