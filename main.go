@@ -5,6 +5,7 @@ import (
 	"os"
 
 	database "go-postgres-fiber/connection"
+	"go-postgres-fiber/items"
 	"go-postgres-fiber/models"
 	"go-postgres-fiber/users"
 
@@ -41,5 +42,6 @@ func main() {
 
 	app := fiber.New()
 	users.SetupRoutes(app)
+	items.SetupRoutes(app)
 	app.Listen(":8080")
 }
