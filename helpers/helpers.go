@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"fmt"
+	"go-postgres-fiber/models"
 	"log"
 	"os"
 	"strings"
@@ -11,7 +12,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func GenerateJWT() (string, error) {
+func GenerateJWT(user models.User) (string, error) {
 
 	err := godotenv.Load(".env")
 	if err != nil {
@@ -26,7 +27,7 @@ func GenerateJWT() (string, error) {
 	// modify jwt via Claims method
 	claims := token.Claims.(jwt.MapClaims)
 	claims["expiration"] = generateJWTExp(7)
-	claims["authorized"] = true
+	claims["user"] = user
 
 	tokenString, err := token.SignedString(secretKey)
 	fmt.Println("token string", tokenString)
@@ -39,7 +40,8 @@ func GenerateJWT() (string, error) {
 
 }
 
-func VerifyJWT(headers map[string]string) {
+// func VerifyJWT(headers map[string]string) {
+func VerifyJWT(headers map[string]string) *jwt.Token {
 	auth := headers["Authorization"]
 
 	preToken := strings.Split(auth, " ")[1]
@@ -54,10 +56,12 @@ func VerifyJWT(headers map[string]string) {
 			log.Fatal("error occurred parsing auth token")
 		}
 		if token.Valid {
-			fmt.Println("valid token", token)
+			// fmt.Println("valid token", token)
+			return token
 		}
 
 	}
+	return nil
 }
 
 func generateJWTExp(days int) time.Time {

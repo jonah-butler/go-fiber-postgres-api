@@ -3,12 +3,18 @@ package items
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	database "go-postgres-fiber/connection"
 	models "go-postgres-fiber/models"
 
 	"github.com/gofiber/fiber/v2"
 )
+
+type Item struct {
+	Name   string `json:"name"`
+	UserID uint   `json:"user_id"`
+}
 
 func SetupRoutes(app fiber.Router) {
 	api := app.Group("/api")
@@ -31,6 +37,9 @@ func CreateItem(context *fiber.Ctx) error {
 		)
 	}
 
+	item.CreatedAt = time.Now()
+	item.UpdatedAt = time.Now()
+
 	err = database.Conn.Create(&item).Error
 	if err != nil {
 		fmt.Println("error creating item", err)
@@ -42,7 +51,7 @@ func CreateItem(context *fiber.Ctx) error {
 	return context.Status(http.StatusOK).JSON(
 		&fiber.Map{
 			"status": http.StatusOK,
-			"user":   item,
+			"item":   item,
 		},
 	)
 
