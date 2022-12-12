@@ -12,7 +12,59 @@ import (
 	"github.com/joho/godotenv"
 )
 
+var secretKey = []byte(os.Getenv("JWT_SECRET_KEY"))
+
+// that new new - for creating a more robust jwt claims
+func GenerateAccessClaims(uuid string) (*models.JWTClaims, string) {
+
+	claim := &models.JWTClaims{
+		StandardClaims: jwt.StandardClaims{
+			Issuer:    uuid,
+			ExpiresAt: generateJWTExp(15),
+			Subject:   "access_token",
+			IssuedAt:  time.Now().Unix(),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claim)
+	tokenString, err := token.SignedString(secretKey)
+	if err != nil {
+		panic(err)
+	}
+
+	return claim, tokenString
+
+}
+
+// this helper generates a JWT used for validation across services
+// this jwt generation is strictly for short lived authorization tokens
 func GenerateJWT(user models.User) (string, error) {
+
+	err := godotenv.Load(".env")
+	if err != nil {
+		log.Fatal("failed to load env vars for jwt token generation", err)
+	}
+
+	// generate token with signing method
+	token := jwt.New(jwt.SigningMethodHS256)
+
+	// modify jwt via Claims method
+	claims := token.Claims.(jwt.MapClaims)
+	claims["expiration"] = generateJWTExp(15)
+	claims["user"] = user
+
+	tokenString, err := token.SignedString(secretKey)
+	fmt.Println("token string", tokenString)
+
+	if err != nil {
+		return "", err
+	}
+
+	return tokenString, nil
+
+}
+
+func GenerateRefreshJWT(user models.User) (string, error) {
 
 	err := godotenv.Load(".env")
 	if err != nil {
@@ -26,11 +78,10 @@ func GenerateJWT(user models.User) (string, error) {
 
 	// modify jwt via Claims method
 	claims := token.Claims.(jwt.MapClaims)
-	claims["expiration"] = generateJWTExp(7)
-	claims["user"] = user
+	claims["expiration"] = generateJWTRefreshExp(60)
+	claims["id"] = user.ID
 
 	tokenString, err := token.SignedString(secretKey)
-	fmt.Println("token string", tokenString)
 
 	if err != nil {
 		return "", err
@@ -64,6 +115,11 @@ func VerifyJWT(headers map[string]string) *jwt.Token {
 	return nil
 }
 
-func generateJWTExp(days int) time.Time {
+func generateJWTRefreshExp(days int) time.Time {
 	return time.Now().Add((time.Hour * 24) * time.Duration(days))
+}
+
+func generateJWTExp(minutes int) int64 {
+	minutesConverted := time.Duration(minutes) * time.Minute
+	return time.Now().Add(time.Minute * minutesConverted).Unix()
 }
