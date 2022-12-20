@@ -15,4 +15,5 @@ func SetupRoutes(app fiber.Router) {
 	user.Post("/register", CreateUser)
 	user.Post("/login", ValidateUser)
 	user.Get("/authenticate", AuthenticateUser)
+	user.Get("/private", SecureAuth(), PrivateUser)
 }

@@ -13,9 +13,9 @@ import (
 
 func AuthenticateUser(context *fiber.Ctx) error {
 
-	token := helpers.VerifyJWT(context.GetReqHeaders())
-	if token != nil {
-		fmt.Println("token validated", token)
+	token, _, err := helpers.VerifyJWT(context.GetReqHeaders())
+	if err != nil {
+		fiber.NewError(http.StatusUnauthorized, err.Error())
 	}
 
 	return context.Status(http.StatusBadRequest).JSON(
@@ -81,6 +81,8 @@ func ValidateUser(context *fiber.Ctx) error {
 	database.Conn.
 		Where("email = ?", userPayload.Email).First(&user)
 
+	fmt.Println(user)
+
 	isPasswordCorrect := validatePassword(user.Password, userPayload.Password)
 
 	if !isPasswordCorrect {
@@ -92,18 +94,26 @@ func ValidateUser(context *fiber.Ctx) error {
 		)
 	}
 
-	// token, err := helpers.GenerateJWT(user)
-	// if err != nil {
-	// 	fmt.Println("failed to create token")
-	// }
-	claim, token := helpers.GenerateAccessClaims(user.ID.String())
-	fmt.Println(claim, token)
+	claim, token := helpers.GenerateAccessClaims(user)
+	refreshToken := helpers.GenerateRefreshClaims(claim)
+	fmt.Println("subject = ", claim.Subject)
+	fmt.Println("issuer = ", claim.Issuer)
+	// fmt.Println("subject = ", claim.Subject)
 
 	return context.Status(http.StatusOK).JSON(
 		&fiber.Map{
-			"status": http.StatusOK,
-			"token":  token,
+			"status":       http.StatusOK,
+			"token":        token,
+			"refreshToken": refreshToken,
 		},
 	)
+
+}
+
+func PrivateUser(context *fiber.Ctx) error {
+
+	fmt.Println("made it to private user route")
+
+	return nil
 
 }

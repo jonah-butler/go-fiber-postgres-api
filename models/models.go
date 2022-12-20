@@ -37,9 +37,21 @@ type User struct {
 	// ShareableItems *[]ShareableItem `gorm:"ForeignKey:UserID" json:"shareable_items"`
 }
 
+type MinimumUser struct {
+	Username string `json:"username"`
+	Email    string `json:"email"`
+}
+
 type JWTClaims struct {
 	jwt.StandardClaims
-	ID uuid.UUID `gorm:"primary key"`
+	ID       uuid.UUID `gorm:"primaryKey"`
+	Email    string    `json:"email"`
+	Username string    `json:"username"`
+}
+
+type JWTRefreshClaims struct {
+	jwt.StandardClaims
+	ID string `gorm:"primaryKey"`
 }
 
 type UserErrors struct {
@@ -50,12 +62,18 @@ type UserErrors struct {
 }
 
 func MigrateTables(db *gorm.DB) error {
+
 	err := db.AutoMigrate(&User{})
 	if err != nil {
 		log.Fatal("failed to migrate user model")
 		return err
 	}
 	err = db.AutoMigrate(&Location{})
+	if err != nil {
+		log.Fatal("failed to migrate location model")
+		return err
+	}
+	err = db.AutoMigrate(&JWTRefreshClaims{})
 	if err != nil {
 		log.Fatal("failed to migrate location model")
 		return err

@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"fmt"
+	database "go-postgres-fiber/connection"
 	"go-postgres-fiber/models"
 	"log"
 	"os"
@@ -15,15 +16,17 @@ import (
 var secretKey = []byte(os.Getenv("JWT_SECRET_KEY"))
 
 // that new new - for creating a more robust jwt claims
-func GenerateAccessClaims(uuid string) (*models.JWTClaims, string) {
+func GenerateAccessClaims(user models.User) (*models.JWTClaims, string) {
 
 	claim := &models.JWTClaims{
 		StandardClaims: jwt.StandardClaims{
-			Issuer:    uuid,
+			Issuer:    user.ID.String(),
 			ExpiresAt: generateJWTExp(15),
 			Subject:   "access_token",
 			IssuedAt:  time.Now().Unix(),
 		},
+		Email:    user.Email,
+		Username: user.Username,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claim)
@@ -31,8 +34,48 @@ func GenerateAccessClaims(uuid string) (*models.JWTClaims, string) {
 	if err != nil {
 		panic(err)
 	}
-
+	fmt.Println(claim)
 	return claim, tokenString
+
+}
+
+func GenerateRefreshClaims(claims *models.JWTClaims) string {
+
+	// check if claims issuer has any refresh tokens stored in db
+	result := database.Conn.Where(&models.JWTRefreshClaims{
+		StandardClaims: jwt.StandardClaims{
+			Issuer: claims.Issuer,
+		},
+	}).Find(&models.JWTRefreshClaims{})
+
+	// if refresh token already present, delete before inserting new claim
+	if result.RowsAffected == 1 {
+		database.Conn.Where(&models.JWTRefreshClaims{
+			StandardClaims: jwt.StandardClaims{
+				Issuer: claims.Issuer,
+			},
+		}).Delete(&models.JWTRefreshClaims{})
+	}
+
+	refreshClaim := &models.JWTRefreshClaims{
+		StandardClaims: jwt.StandardClaims{
+			Issuer:    claims.Issuer,
+			ExpiresAt: generateJWTRefreshExp(15),
+			Subject:   "refresh_token",
+			IssuedAt:  time.Now().Unix(),
+		},
+	}
+	// create the new claim in db
+	database.Conn.Create(&refreshClaim)
+
+	// create new jwt
+	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaim)
+	refreshTokenStr, err := refreshToken.SignedString(secretKey)
+	if err != nil {
+		panic(err)
+	}
+
+	return refreshTokenStr
 
 }
 
@@ -92,31 +135,33 @@ func GenerateRefreshJWT(user models.User) (string, error) {
 }
 
 // func VerifyJWT(headers map[string]string) {
-func VerifyJWT(headers map[string]string) *jwt.Token {
+func VerifyJWT(headers map[string]string) (*jwt.Token, *models.JWTClaims, error) {
 	auth := headers["Authorization"]
 
 	preToken := strings.Split(auth, " ")[1]
+	claims := new(models.JWTClaims)
 
 	if len(preToken) > 0 {
 
-		token, err := jwt.Parse(preToken, func(token *jwt.Token) (interface{}, error) {
-			return []byte(os.Getenv("JWT_SECRET_KEY")), nil
-		})
+		token, err := jwt.ParseWithClaims(preToken, claims,
+			func(token *jwt.Token) (interface{}, error) {
+				return secretKey, nil
+			})
 
 		if err != nil {
-			log.Fatal("error occurred parsing auth token")
+			panic("error occurred parsing auth token")
 		}
 		if token.Valid {
-			// fmt.Println("valid token", token)
-			return token
+			return token, claims, nil
 		}
 
 	}
-	return nil
+
+	return nil, nil, fmt.Errorf("unauthorized access")
 }
 
-func generateJWTRefreshExp(days int) time.Time {
-	return time.Now().Add((time.Hour * 24) * time.Duration(days))
+func generateJWTRefreshExp(days int) int64 {
+	return time.Now().Add((time.Hour * 24) * time.Duration(days)).Unix()
 }
 
 func generateJWTExp(minutes int) int64 {
