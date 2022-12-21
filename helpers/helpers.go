@@ -166,5 +166,5 @@ func generateJWTRefreshExp(days int) int64 {
 
 func generateJWTExp(minutes int) int64 {
 	minutesConverted := time.Duration(minutes) * time.Minute
-	return time.Now().Add(time.Minute * minutesConverted).Unix()
+	return time.Now().Add(time.Minute + minutesConverted).Unix()
 }
