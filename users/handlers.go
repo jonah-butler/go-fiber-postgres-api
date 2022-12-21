@@ -96,9 +96,18 @@ func ValidateUser(context *fiber.Ctx) error {
 
 	claim, token := helpers.GenerateAccessClaims(user)
 	refreshToken := helpers.GenerateRefreshClaims(claim)
-	fmt.Println("subject = ", claim.Subject)
-	fmt.Println("issuer = ", claim.Issuer)
-	// fmt.Println("subject = ", claim.Subject)
+
+	cookie1 := new(fiber.Cookie)
+	cookie2 := new(fiber.Cookie)
+
+	cookie1.Name = "AccessToken"
+	cookie1.Value = token
+
+	cookie2.Name = "RefreshToken"
+	cookie2.Value = refreshToken
+
+	context.Cookie(cookie1)
+	context.Cookie(cookie2)
 
 	return context.Status(http.StatusOK).JSON(
 		&fiber.Map{
@@ -113,6 +122,10 @@ func ValidateUser(context *fiber.Ctx) error {
 func PrivateUser(context *fiber.Ctx) error {
 
 	fmt.Println("made it to private user route")
+
+	// cookie := context.Cookies("AccessToken")
+
+	// fmt.Println("cookies", cookie)
 
 	return nil
 
