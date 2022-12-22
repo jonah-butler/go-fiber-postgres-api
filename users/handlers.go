@@ -13,7 +13,10 @@ import (
 
 func AuthenticateUser(context *fiber.Ctx) error {
 
-	token, _, err := helpers.VerifyJWT(context.GetReqHeaders())
+	headers := context.GetReqHeaders()
+	authToken := headers["Authorization"]
+
+	token, _, err := helpers.VerifyJWT(authToken)
 	if err != nil {
 		fiber.NewError(http.StatusUnauthorized, err.Error())
 	}
@@ -94,8 +97,24 @@ func ValidateUser(context *fiber.Ctx) error {
 		)
 	}
 
-	claim, token := helpers.GenerateAccessClaims(user)
-	refreshToken := helpers.GenerateRefreshClaims(claim)
+	claim, token, err := helpers.GenerateAccessClaims(user)
+	if err != nil {
+		return context.Status(http.StatusBadRequest).JSON(
+			&fiber.Map{
+				"error":   true,
+				"message": err.Error(),
+			},
+		)
+	}
+	refreshToken, err := helpers.GenerateRefreshClaims(claim)
+	if err != nil {
+		return context.Status(http.StatusBadRequest).JSON(
+			&fiber.Map{
+				"error":   true,
+				"message": err.Error(),
+			},
+		)
+	}
 
 	cookie1 := new(fiber.Cookie)
 	cookie2 := new(fiber.Cookie)
@@ -123,10 +142,105 @@ func PrivateUser(context *fiber.Ctx) error {
 
 	fmt.Println("made it to private user route")
 
-	// cookie := context.Cookies("AccessToken")
-
-	// fmt.Println("cookies", cookie)
-
 	return nil
+
+}
+
+func RefreshAccessToken(context *fiber.Ctx) error {
+
+	// check cookie for refresh token
+	refreshToken := context.Cookies("RefreshToken")
+	if refreshToken == "" {
+		return context.Status(http.StatusBadRequest).JSON(
+			&fiber.Map{
+				"error":   true,
+				"message": "Request missing required cookie",
+			},
+		)
+	}
+
+	// parse refresh token
+	token, claims, err := helpers.VerifyRefreshJWT(refreshToken)
+	if err != nil {
+		return context.Status(http.StatusBadRequest).JSON(
+			&fiber.Map{
+				"errror":  true,
+				"message": err.Error(),
+			},
+		)
+	}
+
+	// lookup refresh token from cookie
+	result := database.Conn.Where(
+		"expires_at = ? AND issued_at = ? AND issuer = ?",
+		claims.ExpiresAt, claims.IssuedAt, claims.Issuer,
+	).First(&models.JWTRefreshClaims{})
+
+	// if no data from table, clear cookies as they've been malformed
+	if result.RowsAffected <= 0 {
+		context.ClearCookie("AccessToken", "RefreshToken")
+		return context.Status(http.StatusForbidden).JSON(
+			&fiber.Map{
+				"error":   true,
+				"message": "Invalid token",
+			},
+		)
+	}
+
+	if token.Valid {
+
+		if claims.ExpiresAt < time.Now().Unix() {
+			context.ClearCookie("AccessToken", "RefreshToken")
+			return context.Status(http.StatusForbidden).JSON(
+				&fiber.Map{
+					"error":   true,
+					"message": "Invalid token",
+				},
+			)
+		}
+
+	} else {
+
+		context.ClearCookie("AccessToken", "RefreshToken")
+		return context.Status(http.StatusForbidden).JSON(
+			&fiber.Map{
+				"error":   true,
+				"message": "Invalid token",
+			},
+		)
+
+	}
+
+	user := models.User{}
+
+	database.Conn.
+		Where("id = ?", claims.Issuer).First(&user)
+
+	_, newToken, err := helpers.GenerateAccessClaims(user)
+	if err != nil {
+		return context.Status(http.StatusBadRequest).JSON(
+			&fiber.Map{
+				"error":   true,
+				"message": err.Error(),
+			},
+		)
+	}
+
+	context.Cookie(
+		&fiber.Cookie{
+			Name:     "AccessToken",
+			Value:    newToken,
+			HTTPOnly: true,
+			Expires:  time.Now().Add(24 * time.Hour),
+			Secure:   true,
+		},
+	)
+
+	return context.Status(http.StatusOK).JSON(
+		&fiber.Map{
+			"status": http.StatusOK,
+			"token":  newToken,
+		},
+	)
 
 }
