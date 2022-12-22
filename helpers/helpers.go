@@ -6,9 +6,9 @@ import (
 	"go-postgres-fiber/models"
 	"log"
 	"os"
-	"strings"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt"
 	"github.com/joho/godotenv"
 )
@@ -16,7 +16,7 @@ import (
 var secretKey = []byte(os.Getenv("JWT_SECRET_KEY"))
 
 // that new new - for creating a more robust jwt claims
-func GenerateAccessClaims(user models.User) (*models.JWTClaims, string) {
+func GenerateAccessClaims(user models.User) (*models.JWTClaims, string, error) {
 
 	claim := &models.JWTClaims{
 		StandardClaims: jwt.StandardClaims{
@@ -32,14 +32,14 @@ func GenerateAccessClaims(user models.User) (*models.JWTClaims, string) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claim)
 	tokenString, err := token.SignedString(secretKey)
 	if err != nil {
-		panic(err)
+		return nil, "", err
 	}
 	fmt.Println(claim)
-	return claim, tokenString
+	return claim, tokenString, nil
 
 }
 
-func GenerateRefreshClaims(claims *models.JWTClaims) string {
+func GenerateRefreshClaims(claims *models.JWTClaims) (string, error) {
 
 	// check if claims issuer has any refresh tokens stored in db
 	result := database.Conn.Where(&models.JWTRefreshClaims{
@@ -72,10 +72,10 @@ func GenerateRefreshClaims(claims *models.JWTClaims) string {
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaim)
 	refreshTokenStr, err := refreshToken.SignedString(secretKey)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 
-	return refreshTokenStr
+	return refreshTokenStr, nil
 
 }
 
@@ -134,22 +134,19 @@ func GenerateRefreshJWT(user models.User) (string, error) {
 
 }
 
-// func VerifyJWT(headers map[string]string) {
-func VerifyJWT(headers map[string]string) (*jwt.Token, *models.JWTClaims, error) {
-	auth := headers["Authorization"]
+func VerifyJWT(authToken string) (*jwt.Token, *models.JWTClaims, error) {
 
-	preToken := strings.Split(auth, " ")[1]
 	claims := new(models.JWTClaims)
 
-	if len(preToken) > 0 {
+	if len(authToken) > 0 {
 
-		token, err := jwt.ParseWithClaims(preToken, claims,
+		token, err := jwt.ParseWithClaims(authToken, claims,
 			func(token *jwt.Token) (interface{}, error) {
 				return secretKey, nil
 			})
 
 		if err != nil {
-			panic("error occurred parsing auth token")
+			return nil, nil, err
 		}
 		if token.Valid {
 			return token, claims, nil
@@ -160,6 +157,30 @@ func VerifyJWT(headers map[string]string) (*jwt.Token, *models.JWTClaims, error)
 	return nil, nil, fmt.Errorf("unauthorized access")
 }
 
+func VerifyRefreshJWT(refreshToken string) (*jwt.Token, *models.JWTRefreshClaims, error) {
+
+	claims := new(models.JWTRefreshClaims)
+
+	if len(refreshToken) > 0 {
+
+		token, err := jwt.ParseWithClaims(refreshToken, claims,
+			func(token *jwt.Token) (interface{}, error) {
+				return secretKey, nil
+			})
+
+		if err != nil {
+			return nil, nil, err
+		}
+		if token.Valid {
+			return token, claims, nil
+		}
+
+	}
+
+	return nil, nil, fmt.Errorf("unauthorized access")
+
+}
+
 func generateJWTRefreshExp(days int) int64 {
 	return time.Now().Add((time.Hour * 24) * time.Duration(days)).Unix()
 }
@@ -167,4 +188,26 @@ func generateJWTRefreshExp(days int) int64 {
 func generateJWTExp(minutes int) int64 {
 	minutesConverted := time.Duration(minutes) * time.Minute
 	return time.Now().Add(time.Minute + minutesConverted).Unix()
+}
+
+func SetTokenCookie(accessToken, refreshToken string) (*fiber.Cookie, *fiber.Cookie) {
+
+	token1 := &fiber.Cookie{
+		Name:     "AccessToken",
+		Value:    accessToken,
+		HTTPOnly: true,
+		Expires:  time.Now().Add(24 * time.Hour),
+		Secure:   true,
+	}
+
+	token2 := &fiber.Cookie{
+		Name:     "RefreshToken",
+		Value:    refreshToken,
+		HTTPOnly: true,
+		Expires:  time.Now().Add(10 * 24 * time.Hour),
+		Secure:   true,
+	}
+
+	return token1, token2
+
 }
