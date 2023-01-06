@@ -125,24 +125,19 @@ func ValidateUser(context *fiber.Ctx) error {
 	cookie2.Name = "RefreshToken"
 	cookie2.Value = refreshToken
 
-	context.Cookie(cookie1)
-	context.Cookie(cookie2)
+	accessCookie, refreshCookie := GetAuthCookies(token, refreshToken)
+
+	context.Cookie(accessCookie)
+	context.Cookie(refreshCookie)
 
 	return context.Status(http.StatusOK).JSON(
 		&fiber.Map{
-			"status":       http.StatusOK,
+			"status": http.StatusOK,
+			// eventually get rid of this
 			"token":        token,
 			"refreshToken": refreshToken,
 		},
 	)
-
-}
-
-func PrivateUser(context *fiber.Ctx) error {
-
-	fmt.Println("made it to private user route")
-
-	return nil
 
 }
 
@@ -242,5 +237,43 @@ func RefreshAccessToken(context *fiber.Ctx) error {
 			"token":  newToken,
 		},
 	)
+
+}
+
+func GetUser(context *fiber.Ctx) error {
+
+	userId := context.Locals("user_id")
+	// check user id from jwt parse is an actual value
+	if userId == "" || userId == nil {
+		return context.Status(fiber.StatusUnauthorized).JSON(
+			fiber.Map{
+				"error":   true,
+				"message": "Invalid user id from jwt parse",
+			},
+		)
+	}
+
+	// if user id from locals does not match user id param, access to user data is not allowed
+	if userId != context.Params("id") {
+		return context.Status(fiber.StatusUnauthorized).JSON(
+			fiber.Map{
+				"error":   true,
+				"message": "Access unauthorized",
+			},
+		)
+	}
+
+	user := User{}
+
+	database.Conn.
+		Where("id = ?", userId).First(&user)
+
+	return context.Status(200).JSON(
+		fiber.Map{
+			"user": user,
+		},
+	)
+
+	return nil
 
 }

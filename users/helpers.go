@@ -2,7 +2,9 @@ package users
 
 import (
 	"fmt"
+	"time"
 
+	"github.com/gofiber/fiber/v2"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -22,4 +24,26 @@ func validatePassword(dbPassword string, plainPwd string) bool {
 		return false
 	}
 	return true
+}
+
+func GetAuthCookies(accessToken, refreshToken string) (*fiber.Cookie, *fiber.Cookie) {
+
+	accessTokenCookie := &fiber.Cookie{
+		Name:     "AccessToken",
+		Value:    accessToken,
+		HTTPOnly: true,
+		Expires:  time.Now().Add(24 * time.Hour),
+		Secure:   true,
+	}
+
+	refreshTokenCookie := &fiber.Cookie{
+		Name:     "AccessToken",
+		Value:    accessToken,
+		HTTPOnly: true,
+		Expires:  time.Now().Add(10 * 24 * time.Hour),
+		Secure:   true,
+	}
+
+	return accessTokenCookie, refreshTokenCookie
+
 }

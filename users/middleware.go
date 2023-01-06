@@ -2,6 +2,7 @@ package users
 
 import (
 	"go-postgres-fiber/helpers"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -12,7 +13,16 @@ func SecureAuth() func(*fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
 
 		headers := c.GetReqHeaders()
-		authToken := headers["Authorization"]
+		authTokenBearer := headers["Authorization"]
+		authToken := strings.Split(authTokenBearer, " ")[1]
+		if authToken == "" {
+			return c.Status(fiber.StatusUnauthorized).JSON(
+				fiber.Map{
+					"error":   true,
+					"message": "Invalid Token Headers",
+				},
+			)
+		}
 
 		_, claims, err := helpers.VerifyJWT(authToken)
 		if err != nil {
@@ -42,7 +52,7 @@ func SecureAuth() func(*fiber.Ctx) error {
 			)
 		}
 
-		c.Locals("id", claims.Issuer)
+		c.Locals("user_id", claims.Issuer)
 
 		return c.Next()
 

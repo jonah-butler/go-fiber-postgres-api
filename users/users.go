@@ -22,5 +22,5 @@ func SetupRoutes(app fiber.Router) {
 	protected.Use(SecureAuth())
 
 	// private user endpoints
-	protected.Get("/private", PrivateUser)
+	protected.Get("/:id", GetUser)
 }
