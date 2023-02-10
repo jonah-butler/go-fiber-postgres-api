@@ -31,17 +31,17 @@ func GetAuthCookies(accessToken, refreshToken string) (*fiber.Cookie, *fiber.Coo
 	accessTokenCookie := &fiber.Cookie{
 		Name:     "AccessToken",
 		Value:    accessToken,
-		HTTPOnly: true,
+		HTTPOnly: false,
 		Expires:  time.Now().Add(24 * time.Hour),
-		Secure:   true,
+		Secure:   false,
 	}
 
 	refreshTokenCookie := &fiber.Cookie{
-		Name:     "AccessToken",
+		Name:     "RefreshToken",
 		Value:    accessToken,
-		HTTPOnly: true,
+		HTTPOnly: false,
 		Expires:  time.Now().Add(10 * 24 * time.Hour),
-		Secure:   true,
+		Secure:   false,
 	}
 
 	return accessTokenCookie, refreshTokenCookie

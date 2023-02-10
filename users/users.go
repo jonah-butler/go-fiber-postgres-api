@@ -18,9 +18,10 @@ func SetupRoutes(app fiber.Router) {
 	user.Get("/authenticate", AuthenticateUser)
 	user.Get("/refresh-access-token", RefreshAccessToken)
 
+	// group protected endpoints
 	protected := user.Group("/p")
 	protected.Use(SecureAuth())
 
-	// private user endpoints
+	// protected user endpoints
 	protected.Get("/:id", GetUser)
 }

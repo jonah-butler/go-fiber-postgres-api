@@ -149,12 +149,20 @@ func VerifyJWT(authToken string) (*jwt.Token, *models.JWTClaims, error) {
 			return nil, nil, err
 		}
 		if token.Valid {
+			if claims.ExpiresAt < time.Now().Unix() {
+				return nil, nil, fiber.NewError(fiber.StatusUnauthorized, "Access token expired")
+			}
 			return token, claims, nil
+		}
+
+		ve, _ := err.(*jwt.ValidationError)
+		if ve != nil {
+			return nil, nil, fiber.NewError(500, "Token validation error")
 		}
 
 	}
 
-	return nil, nil, fmt.Errorf("unauthorized access")
+	return nil, nil, fiber.NewError(500, "Access token is not valid")
 }
 
 func VerifyRefreshJWT(refreshToken string) (*jwt.Token, *models.JWTRefreshClaims, error) {

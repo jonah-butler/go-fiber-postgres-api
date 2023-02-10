@@ -15,7 +15,7 @@ type User struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-type UnvalidatedUser struct {
+type UserAuthPayload struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }

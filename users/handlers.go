@@ -11,25 +11,11 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func AuthenticateUser(context *fiber.Ctx) error {
-
-	headers := context.GetReqHeaders()
-	authToken := headers["Authorization"]
-
-	token, _, err := helpers.VerifyJWT(authToken)
-	if err != nil {
-		fiber.NewError(http.StatusUnauthorized, err.Error())
-	}
-
-	return context.Status(http.StatusBadRequest).JSON(
-		&fiber.Map{
-			"message": "authenticated",
-			"user":    token,
-		},
-	)
-
-}
-
+/*
+*
+* Handler for creating a new user
+*
+ */
 func CreateUser(context *fiber.Ctx) error {
 	user := models.User{}
 
@@ -53,7 +39,6 @@ func CreateUser(context *fiber.Ctx) error {
 
 	err = database.Conn.Create(&user).Error
 	if err != nil {
-		fmt.Println("error creating user: ", err)
 		return context.Status(500).JSON(
 			&fiber.Map{"error": err.Error()},
 		)
@@ -68,9 +53,19 @@ func CreateUser(context *fiber.Ctx) error {
 	)
 }
 
+/*
+*
+* Handler for processing user payload when logging in
+* - process payload
+* - perform lookup and password validation
+* - generate jwt access claims
+* - generate jwt refresh claims
+* - generate and set access/refresh cookies
+*
+*/
 func ValidateUser(context *fiber.Ctx) error {
 
-	userPayload := UnvalidatedUser{}
+	userPayload := UserAuthPayload{}
 	user := models.User{}
 
 	if err := context.BodyParser(&userPayload); err != nil {
@@ -92,12 +87,12 @@ func ValidateUser(context *fiber.Ctx) error {
 		return context.Status(http.StatusBadRequest).JSON(
 			&fiber.Map{
 				"status":  http.StatusBadRequest,
-				"message": "The provided login details are incorrect",
+				"message": fmt.Sprintf("The provided login details are incorrect for email: %s", userPayload.Email),
 			},
 		)
 	}
 
-	claim, token, err := helpers.GenerateAccessClaims(user)
+	claim, access_token, err := helpers.GenerateAccessClaims(user)
 	if err != nil {
 		return context.Status(http.StatusBadRequest).JSON(
 			&fiber.Map{
@@ -106,7 +101,7 @@ func ValidateUser(context *fiber.Ctx) error {
 			},
 		)
 	}
-	refreshToken, err := helpers.GenerateRefreshClaims(claim)
+	refresh_token, err := helpers.GenerateRefreshClaims(claim)
 	if err != nil {
 		return context.Status(http.StatusBadRequest).JSON(
 			&fiber.Map{
@@ -116,16 +111,7 @@ func ValidateUser(context *fiber.Ctx) error {
 		)
 	}
 
-	cookie1 := new(fiber.Cookie)
-	cookie2 := new(fiber.Cookie)
-
-	cookie1.Name = "AccessToken"
-	cookie1.Value = token
-
-	cookie2.Name = "RefreshToken"
-	cookie2.Value = refreshToken
-
-	accessCookie, refreshCookie := GetAuthCookies(token, refreshToken)
+	accessCookie, refreshCookie := GetAuthCookies(access_token, refresh_token)
 
 	context.Cookie(accessCookie)
 	context.Cookie(refreshCookie)
@@ -133,9 +119,34 @@ func ValidateUser(context *fiber.Ctx) error {
 	return context.Status(http.StatusOK).JSON(
 		&fiber.Map{
 			"status": http.StatusOK,
-			// eventually get rid of this
-			"token":        token,
-			"refreshToken": refreshToken,
+			"token":        access_token,
+			"refresh_token": refresh_token,
+		},
+	)
+
+}
+
+/*
+*
+* Handler for authenticating requests
+*
+*/
+func AuthenticateUser(context *fiber.Ctx) error {
+
+	authToken := context.Cookies("AccessToken")
+	if authToken == "" {
+		return fiber.NewError(http.StatusBadRequest, "Invalid token")
+	}
+
+	token, _, err := helpers.VerifyJWT(authToken)
+	if err != nil {
+		fiber.NewError(http.StatusUnauthorized, err.Error())
+	}
+
+	return context.Status(http.StatusBadRequest).JSON(
+		&fiber.Map{
+			"message": "authenticated",
+			"user":    token,
 		},
 	)
 
@@ -143,7 +154,6 @@ func ValidateUser(context *fiber.Ctx) error {
 
 func RefreshAccessToken(context *fiber.Ctx) error {
 
-	// check cookie for refresh token
 	refreshToken := context.Cookies("RefreshToken")
 	if refreshToken == "" {
 		return context.Status(http.StatusBadRequest).JSON(
@@ -273,7 +283,4 @@ func GetUser(context *fiber.Ctx) error {
 			"user": user,
 		},
 	)
-
-	return nil
-
 }
